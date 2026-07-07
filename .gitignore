@@ -1,0 +1,34 @@
+# Environment & secrets
+.env
+*.env
+
+# Database
+*.db
+*.sqlite
+
+# Uploaded files
+App/Uploaded_Resumes/*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+venvapp/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
