@@ -20,6 +20,10 @@ import nltk
 nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('punkt_tab')
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from pyresparser import ResumeParser
 
 from config   import ADMIN_USER, ADMIN_PASS, GROQ_API_KEY

@@ -18,7 +18,10 @@ class ResumeParser(object):
         custom_regex=None
     ):
         nlp = spacy.load('en_core_web_sm')
-        custom_nlp = spacy.load(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            custom_nlp = spacy.load(os.path.dirname(os.path.abspath(__file__)))
+        except Exception:
+            custom_nlp = spacy.blank('en')
         self.__skills_file = skills_file
         self.__custom_regex = custom_regex
         self.__matcher = Matcher(nlp.vocab)
