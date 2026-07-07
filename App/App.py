@@ -23,6 +23,9 @@ nltk.download('punkt_tab')
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+for mod in list(sys.modules.keys()):
+    if mod == 'pyresparser' or mod.startswith('pyresparser.'):
+        del sys.modules[mod]
 
 from pyresparser import ResumeParser
 
