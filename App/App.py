@@ -16,6 +16,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import nltk
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('punkt_tab')
 from pyresparser import ResumeParser
 
 from config   import ADMIN_USER, ADMIN_PASS, GROQ_API_KEY
