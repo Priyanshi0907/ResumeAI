@@ -114,3 +114,10 @@ To access the admin analytics panel, use the credentials configured in your `.en
 | `MYSQL_DB` | `cv` | Database schema name |
 | `ADMIN_USER` | `admin` | Admin dashboard login username |
 | `ADMIN_PASS` | `admin@123` | Admin dashboard login password |
+
+---
+
+## 👤 Author
+
+**Priyanshi Choudhary**  
+GitHub: [@Priyanshi0907](https://github.com/Priyanshi0907)
