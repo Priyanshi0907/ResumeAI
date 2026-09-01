@@ -1,0 +1,23 @@
+{
+  "name": "ai-resume-analyzer",
+  "version": "2.0.0",
+  "description": "AI Resume Analyzer & Job Matcher with React, Node.js, and Python/FastAPI ML Models",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm start",
+    "dev:ml": "venv\\Scripts\\python -m uvicorn main:app --app-dir App --host 127.0.0.1 --port 8000 --reload",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install"
+  },
+  "keywords": [
+    "resume-analyzer",
+    "react",
+    "nodejs",
+    "fastapi",
+    "spacy",
+    "nlp",
+    "machine-learning",
+    "ats"
+  ],
+  "author": "Priyanshi",
+  "license": "ISC"
+}
