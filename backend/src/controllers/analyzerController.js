@@ -89,8 +89,10 @@ const analyzeResume = async (req, res) => {
   } catch (error) {
     console.error('Analyzer error:', error);
     let friendlyMsg = error.response?.data?.detail || error.message || 'Error running resume analysis pipeline.';
-    if (error.response?.status === 502 || error.code === 'ECONNREFUSED' || error.message?.includes('502')) {
-      friendlyMsg = 'The AI/ML service is currently waking up or unavailable. Render free tier takes ~60 seconds to spin up on the first request. Please wait a minute and try again.';
+    if (error.response?.status === 429 || error.message?.includes('429')) {
+      friendlyMsg = 'AI rate limit reached. Please wait 1 minute before retrying.';
+    } else if (error.response?.status === 502 || error.code === 'ECONNREFUSED' || error.message?.includes('502')) {
+      friendlyMsg = 'The AI/ML service is currently waking up. Render free tier takes ~60 seconds to spin up on the first request. Please wait a minute and try again.';
     }
     return res.status(500).json({
       success: false,
