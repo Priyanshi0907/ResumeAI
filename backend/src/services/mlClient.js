@@ -5,7 +5,7 @@ const { FASTAPI_URL } = require('../config/env');
 
 const mlApi = axios.create({
   baseURL: FASTAPI_URL,
-  timeout: 60000, // 60s timeout for LLM calls
+  timeout: 120000, // 120s timeout to allow Render free tier to wake up from cold-sleep
 });
 
 const parseAndAnalyzeResume = async (filePath, formDataFields = {}) => {
