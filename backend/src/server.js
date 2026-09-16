@@ -48,9 +48,48 @@ app.use((err, req, res, next) => {
   });
 });
 
+const { spawn } = require('child_process');
+
+function initFastAPIService() {
+  const isLocal = !process.env.FASTAPI_URL ||
+    process.env.FASTAPI_URL.includes('127.0.0.1') ||
+    process.env.FASTAPI_URL.includes('localhost');
+
+  if (!isLocal) {
+    console.log(`📡 Using external FastAPI ML Service at: ${process.env.FASTAPI_URL}`);
+    return;
+  }
+
+  const appDir = path.resolve(__dirname, '../../App');
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+  console.log(`🐍 Starting embedded FastAPI ML engine from: ${appDir}...`);
+  try {
+    const mlProc = spawn(pythonCmd, ['-m', 'uvicorn', 'main:app', '--app-dir', appDir, '--host', '127.0.0.1', '--port', '8000'], {
+      stdio: 'inherit',
+    });
+
+    mlProc.on('error', (err) => {
+      console.warn(`⚠️ Embedded FastAPI launch notice: ${err.message}`);
+    });
+
+    mlProc.on('exit', (code, sig) => {
+      console.log(`ℹ️ Embedded FastAPI process stopped (code: ${code}, sig: ${sig})`);
+    });
+
+    process.on('exit', () => {
+      try { mlProc.kill(); } catch (e) {}
+    });
+  } catch (err) {
+    console.warn(`⚠️ Could not spawn FastAPI process: ${err.message}`);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`====================================================`);
   console.log(`🚀 ResumeAI Node.js API Gateway running on port ${PORT}`);
   console.log(`📡 Connected to FastAPI ML Service`);
   console.log(`====================================================`);
+  initFastAPIService();
 });
+

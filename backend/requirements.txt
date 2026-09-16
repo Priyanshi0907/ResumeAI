@@ -1,0 +1,35 @@
+# ── FastAPI Web Framework & Server ────────────────────────
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+
+# ── Resume Parsing ─────────────────────────────────────────
+pyresparser==1.0.6
+pdfminer3==2018.12.3.0
+docx2txt==0.8
+
+# ── NLP & ML ───────────────────────────────────────────────
+spacy==3.7.4
+nltk==3.8.1
+
+# ── Data & Viz ─────────────────────────────────────────────
+pandas==2.2.2
+numpy==1.26.4
+plotly==5.22.0
+
+# ── Image ──────────────────────────────────────────────────
+Pillow==10.3.0
+
+# ── Geolocation ────────────────────────────────────────────
+geocoder==1.38.1
+geopy==2.4.1
+
+# ── DB (optional MySQL fallback) ───────────────────────────
+pymysql==1.1.1
+
+# ── Utilities & LLM ────────────────────────────────────────
+python-dotenv==1.0.1
+requests==2.32.3
+groq==1.5.0
+reportlab==5.0.0
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
