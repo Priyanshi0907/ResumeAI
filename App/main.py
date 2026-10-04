@@ -113,25 +113,129 @@ def groq_call(prompt: str, system: str = "", max_tokens: int = 2200) -> str:
             continue
     raise last_err or ValueError("Failed to call Groq API with candidate models")
 
-CHECKS_DEFINITION = [
-    (["Objective", "Summary", "OBJECTIVE", "SUMMARY", "PROFILE", "About Me", "Executive Summary"], 10, "Summary & Objective"),
-    (["Education", "School", "College", "University", "EDUCATION", "Academic", "Degree"], 15, "Education Details"),
-    (["EXPERIENCE", "WORK EXPERIENCE", "Experience", "Work Experience", "Employment", "Professional Experience"], 20, "Work Experience"),
-    (["INTERNSHIP", "INTERNSHIPS", "Internship", "Internships", "Training", "Apprenticeship"], 5, "Internships & Training"),
-    (["SKILLS", "SKILL", "Skills", "Skill", "TECHNICAL SKILLS", "Core Competencies", "Technologies"], 20, "Skills Section"),
-    (["ACHIEVEMENTS", "Achievements", "AWARDS", "Awards", "Honors", "Accomplishments"], 10, "Achievements & Awards"),
-    (["CERTIFICATIONS", "Certifications", "Certification", "Courses", "Credentials"], 10, "Certifications & Credentials"),
-    (["PROJECTS", "Projects", "PROJECT", "Key Initiatives", "Open Source"], 10, "Projects & Initiatives"),
+SECTION_DEFINITIONS = [
+    {
+        "id": "summary",
+        "label": "Summary & Objective",
+        "points": 10,
+        "keywords": ["Objective", "Summary", "OBJECTIVE", "SUMMARY", "PROFILE", "About Me", "Executive Summary", "Professional Summary", "Career Summary", "Personal Statement"],
+        "pro_tip": "A 3-4 line targeted executive summary highlighting your primary domain, years of experience, and core stack improves ATS keyword density."
+    },
+    {
+        "id": "education",
+        "label": "Education Details",
+        "points": 15,
+        "keywords": ["Education", "School", "College", "University", "EDUCATION", "Academic", "Degree", "Qualifications", "Educational Background", "Academics"],
+        "pro_tip": "List your degree, university/institute, graduation year, and key coursework or honors (e.g. Dean's List, GPA >= 3.5)."
+    },
+    {
+        "id": "experience",
+        "label": "Work Experience & Internships",
+        "points": 25,
+        "keywords": ["EXPERIENCE", "WORK EXPERIENCE", "Experience", "Work Experience", "Employment", "Professional Experience", "Work History", "Career History", "INTERNSHIP", "INTERNSHIPS", "Internship", "Internships", "Training", "Apprenticeship", "Industrial Training", "Practical Training"],
+        "pro_tip": "Use the STAR format (Situation, Task, Action, Result) with strong action verbs (Engineered, Spearheaded, Optimized) and quantified metrics (%, $, scale)."
+    },
+    {
+        "id": "skills",
+        "label": "Skills Section",
+        "points": 20,
+        "keywords": ["SKILLS", "SKILL", "Skills", "Skill", "TECHNICAL SKILLS", "Core Competencies", "Technologies", "Key Skills", "Skill Set", "Tools & Technologies"],
+        "pro_tip": "Organize skills into distinct categories: Programming Languages, Frameworks & Libraries, Cloud & Databases, and Developer Tools."
+    },
+    {
+        "id": "achievements",
+        "label": "Achievements & Awards",
+        "points": 10,
+        "keywords": ["ACHIEVEMENTS", "Achievements", "AWARDS", "Awards", "Honors", "Accomplishments", "Recognitions", "Honors & Awards"],
+        "pro_tip": "Include competitive rankings, hackathon wins, published papers, or employee excellence recognitions."
+    },
+    {
+        "id": "certifications",
+        "label": "Certifications & Credentials",
+        "points": 10,
+        "keywords": ["CERTIFICATIONS", "Certifications", "Certification", "Courses", "Credentials", "Licenses & Certifications", "Certificates"],
+        "pro_tip": "Add verified certifications with issuing authorities (AWS, Google Cloud, Meta, Coursera) and credential IDs/links."
+    },
+    {
+        "id": "projects",
+        "label": "Projects & Initiatives",
+        "points": 10,
+        "keywords": ["PROJECTS", "Projects", "PROJECT", "Key Initiatives", "Open Source", "Academic Projects", "Personal Projects", "Project Work"],
+        "pro_tip": "Provide project title, tech stack used, problem solved, quantified result, and live GitHub demo URL."
+    },
 ]
 
 def calculate_ats_checklist(text: str):
     score = 0
     checks = []
-    for keywords, points, label in CHECKS_DEFINITION:
-        found = any(x.lower() in text.lower() for x in keywords)
+    lines = text.replace('\r\n', '\n').split('\n')
+    
+    detected_headers = []
+    for line_idx, line in enumerate(lines):
+        clean_line = line.strip()
+        if not clean_line or len(clean_line) > 70:
+            continue
+        clean_lower = re.sub(r'^[\s#*>\-–—•0-9.)]+', '', clean_line)
+        clean_lower = re.sub(r'[:\-\—\.\*#]+$', '', clean_lower).strip().lower()
+        
+        for sec in SECTION_DEFINITIONS:
+            for kw in sec["keywords"]:
+                kw_lower = kw.lower()
+                if clean_lower == kw_lower or clean_lower.startswith(kw_lower + ' ') or clean_lower.endswith(' ' + kw_lower):
+                    detected_headers.append({
+                        "sec_id": sec["id"],
+                        "line_idx": line_idx,
+                        "line_text": line
+                    })
+                    break
+                    
+    # Deduplicate headers
+    seen_sec_ids = set()
+    unique_headers = []
+    for h in detected_headers:
+        if h["sec_id"] not in seen_sec_ids:
+            seen_sec_ids.add(h["sec_id"])
+            unique_headers.append(h)
+    unique_headers.sort(key=lambda x: x["line_idx"])
+    
+    # Extract slices
+    extracted_sections = {}
+    for i, curr in enumerate(unique_headers):
+        start_line = curr["line_idx"] + 1
+        end_line = unique_headers[i + 1]["line_idx"] if i + 1 < len(unique_headers) else len(lines)
+        content_lines = lines[start_line:end_line]
+        extracted_sections[curr["sec_id"]] = "\n".join(content_lines).strip()
+        
+    for sec in SECTION_DEFINITIONS:
+        content = extracted_sections.get(sec["id"], "")
+        found = bool(content and len(content) >= 8)
+        if not found:
+            # Fallback search anywhere in text
+            found = any(re.search(r'\b' + re.escape(k.lower()) + r'\b', text.lower()) for k in sec["keywords"])
+            if found:
+                for k in sec["keywords"]:
+                    k_lower = k.lower()
+                    pos = text.lower().find(k_lower)
+                    if pos != -1:
+                        snippet = text[pos + len(k_lower): pos + len(k_lower) + 400].strip()
+                        if len(snippet) > 15:
+                            content = snippet.split('\n\n')[0].strip()
+                            break
+                            
         if found:
-            score += points
-        checks.append({"label": label, "points": points, "found": found})
+            score += sec["points"]
+            
+        word_count = len(content.split()) if content else 0
+        checks.append({
+            "id": sec["id"],
+            "label": sec["label"],
+            "points": sec["points"],
+            "found": found,
+            "content": content,
+            "word_count": word_count,
+            "pro_tip": sec["pro_tip"]
+        })
+        
     score = min(100, max(0, score))
     return score, checks
 
@@ -278,32 +382,550 @@ def generate_next_moves_personalized(detected_skills: list, predicted_field: str
 def generate_best_job_matches(predicted_field: str, detected_skills: list):
     job_templates = {
         "Data Science & AI": [
-            {"role": "Machine Learning Engineer", "company": "Microsoft", "match": "94% Match", "tags": ["Python", "PyTorch", "SQL", "Azure"]},
-            {"role": "Data Scientist / Analyst", "company": "Deloitte", "match": "89% Match", "tags": ["Python", "Pandas", "Scikit-Learn", "Tableau"]},
-            {"role": "AI Research Associate", "company": "Google", "match": "83% Match", "tags": ["Deep Learning", "TensorFlow", "NLP", "CUDA"]}
+            {
+                "role": "Machine Learning Engineer",
+                "company": "Microsoft",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b924 - 40 LPA",
+                "job_type": "Full-time",
+                "tags": ["Python", "PyTorch", "Azure ML", "MLOps", "Transformers", "TensorFlow", "Scikit-Learn"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Machine+Learning+Engineer+Microsoft",
+                "description": "Design, build, and deploy production ML models at scale on Azure."
+            },
+            {
+                "role": "Senior Data Scientist",
+                "company": "Amazon AWS",
+                "location": "Hyderabad, India (Hybrid)",
+                "salary": "\u20b928 - 48 LPA",
+                "job_type": "Full-time",
+                "tags": ["Python", "Scikit-Learn", "AWS SageMaker", "SQL", "Statistics", "Pandas", "NumPy"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Scientist+Amazon",
+                "description": "Lead predictive modeling, behavioral segmentation, and statistical experimentation across AWS cloud services."
+            },
+            {
+                "role": "AI / GenAI Research Engineer",
+                "company": "Google",
+                "location": "Bengaluru, India / Remote",
+                "salary": "\u20b932 - 55 LPA",
+                "job_type": "Full-time",
+                "tags": ["Deep Learning", "NLP", "LLMs", "RAG", "Vector DB", "Python", "Transformers"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=AI+Engineer+Google",
+                "description": "Develop and fine-tune large multimodal models and retrieval-augmented generation frameworks."
+            },
+            {
+                "role": "Data Analyst / BI Specialist",
+                "company": "Deloitte",
+                "location": "Gurgaon, India (Hybrid)",
+                "salary": "\u20b914 - 22 LPA",
+                "job_type": "Full-time",
+                "tags": ["Tableau", "Power BI", "SQL", "Pandas", "EDA", "Excel", "Python"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Analyst+Deloitte",
+                "description": "Transform complex datasets into actionable executive dashboards and ETL pipelines."
+            },
+            {
+                "role": "Computer Vision Engineer",
+                "company": "Flipkart",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b920 - 35 LPA",
+                "job_type": "Full-time",
+                "tags": ["OpenCV", "PyTorch", "YOLO", "CNN", "Docker", "Python", "TensorFlow"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Computer+Vision+Engineer+Flipkart",
+                "description": "Architect visual search, catalog tagging, and defect detection using convolutional networks."
+            },
+            {
+                "role": "Applied Data Science Consultant",
+                "company": "McKinsey & Company",
+                "location": "Mumbai, India (Hybrid)",
+                "salary": "\u20b926 - 45 LPA",
+                "job_type": "Full-time",
+                "tags": ["Machine Learning", "Python", "Business Analytics", "Optimization", "Statistics", "SQL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Scientist+McKinsey",
+                "description": "Formulate AI-driven revenue strategies, pricing optimization engines, and supply chain forecasting models."
+            }
         ],
         "Full Stack Web Development": [
-            {"role": "Frontend Developer", "company": "Google", "match": "94% Match", "tags": ["React", "TypeScript", "Node.js", "Docker"]},
-            {"role": "Full Stack Engineer", "company": "Meta", "match": "88% Match", "tags": ["React", "Python", "GraphQL", "PostgreSQL"]},
-            {"role": "Backend Software Engineer", "company": "Amazon", "match": "82% Match", "tags": ["Node.js", "AWS", "Microservices", "Redis"]}
-        ],
-        "Cloud & DevOps Engineering": [
-            {"role": "DevOps / Site Reliability Engineer", "company": "Netflix", "match": "93% Match", "tags": ["Kubernetes", "Terraform", "AWS", "Linux"]},
-            {"role": "Cloud Infrastructure Engineer", "company": "Amazon AWS", "match": "87% Match", "tags": ["Docker", "CI/CD", "Python", "Prometheus"]},
-            {"role": "Platform Engineer", "company": "Uber", "match": "81% Match", "tags": ["Golang", "Kubernetes", "Helm", "Kafka"]}
-        ],
-        "UI/UX Design & Research": [
-            {"role": "Product Designer", "company": "Airbnb", "match": "95% Match", "tags": ["Figma", "Design Systems", "Prototyping", "Research"]},
-            {"role": "UI/UX Specialist", "company": "Adobe", "match": "88% Match", "tags": ["Adobe XD", "Wireframing", "Interaction Design", "Testing"]},
-            {"role": "UX Researcher", "company": "Spotify", "match": "84% Match", "tags": ["User Interviews", "Usability", "Figma", "Analytics"]}
+            {
+                "role": "Senior Full Stack Engineer",
+                "company": "Meta",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b928 - 50 LPA",
+                "job_type": "Full-time",
+                "tags": ["React", "TypeScript", "Node.js", "GraphQL", "PostgreSQL", "JavaScript", "REST APIs"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Full+Stack+Engineer+Meta",
+                "description": "Build high-throughput web applications and scalable GraphQL services for hundreds of millions of daily active users."
+            },
+            {
+                "role": "Frontend Software Engineer",
+                "company": "Google",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b926 - 45 LPA",
+                "job_type": "Full-time",
+                "tags": ["React", "Next.js", "TypeScript", "Web Performance", "JavaScript", "HTML", "CSS"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Frontend+Engineer+Google",
+                "description": "Architect accessible, ultra-responsive frontend platforms focused on core web vitals and state management."
+            },
+            {
+                "role": "Backend Engineer (Node/Python)",
+                "company": "Uber",
+                "location": "Hyderabad, India (Hybrid)",
+                "salary": "\u20b925 - 42 LPA",
+                "job_type": "Full-time",
+                "tags": ["Node.js", "Python", "Microservices", "Kafka", "Redis", "PostgreSQL", "REST APIs"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Backend+Engineer+Uber",
+                "description": "Develop low-latency distributed dispatch and pricing services handling millions of concurrent geospatial events."
+            },
+            {
+                "role": "Full Stack Developer",
+                "company": "Swiggy",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b918 - 30 LPA",
+                "job_type": "Full-time",
+                "tags": ["React", "Node.js", "MongoDB", "Express", "Docker", "JavaScript", "HTML", "CSS"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Full+Stack+Developer+Swiggy",
+                "description": "Deliver customer-facing discovery and checkout features using React micro-frontends and Node.js APIs."
+            },
+            {
+                "role": "Full Stack Platform Engineer",
+                "company": "Atlassian",
+                "location": "Bengaluru, India / Remote",
+                "salary": "\u20b924 - 40 LPA",
+                "job_type": "Full-time",
+                "tags": ["TypeScript", "React", "AWS", "Java", "REST APIs", "Node.js", "PostgreSQL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Full+Stack+Atlassian",
+                "description": "Build extensible plugin architectures and real-time collaborative document editing interfaces on Jira/Confluence."
+            },
+            {
+                "role": "UI Engineer / Frontend Specialist",
+                "company": "Razorpay",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b916 - 28 LPA",
+                "job_type": "Full-time",
+                "tags": ["React", "JavaScript", "HTML", "CSS", "Design Systems", "Jest", "TypeScript"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Frontend+Developer+Razorpay",
+                "description": "Craft frictionless payment checkout SDKs, analytics dashboards, and accessible UI design libraries."
+            }
         ],
         "Software Engineering": [
-            {"role": "Senior Software Engineer", "company": "Google", "match": "92% Match", "tags": ["Java", "System Design", "Microservices", "SQL"]},
-            {"role": "Software Developer", "company": "Oracle", "match": "87% Match", "tags": ["C++", "Algorithms", "Multithreading", "Linux"]},
-            {"role": "Backend Engineer", "company": "Stripe", "match": "82% Match", "tags": ["Ruby", "Go", "PostgreSQL", "APIs"]}
+            {
+                "role": "Software Development Engineer II",
+                "company": "Amazon",
+                "location": "Hyderabad / Bengaluru, India",
+                "salary": "\u20b928 - 46 LPA",
+                "job_type": "Full-time",
+                "tags": ["Java", "System Design", "Distributed Systems", "AWS", "OOP", "Algorithms", "Data Structures"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Development+Engineer+Amazon",
+                "description": "Architect fault-tolerant e-commerce services with high availability, robust system design, and automated testing."
+            },
+            {
+                "role": "Member of Technical Staff",
+                "company": "Oracle",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b922 - 36 LPA",
+                "job_type": "Full-time",
+                "tags": ["C++", "Algorithms", "Multithreading", "Linux", "Java", "SQL", "Databases"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Developer+Oracle",
+                "description": "Design core relational database engine optimizations and high-performance multithreaded cloud kernels."
+            },
+            {
+                "role": "Backend Software Engineer",
+                "company": "Stripe",
+                "location": "Bengaluru, India / Remote",
+                "salary": "\u20b930 - 52 LPA",
+                "job_type": "Full-time",
+                "tags": ["Go", "Ruby", "PostgreSQL", "APIs", "Python", "Microservices", "Distributed Systems"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Engineer+Stripe",
+                "description": "Build resilient global payments infrastructure and idempotent billing APIs with five-nines reliability."
+            },
+            {
+                "role": "Systems Software Engineer",
+                "company": "Adobe",
+                "location": "Noida / Bengaluru, India",
+                "salary": "\u20b920 - 34 LPA",
+                "job_type": "Full-time",
+                "tags": ["C++", "Java", "Data Structures", "Algorithms", "Python", "Linux", "Cloud APIs"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Engineer+Adobe",
+                "description": "Implement high-performance graphics algorithms, document rendering engines, and real-time cloud collaboration services."
+            },
+            {
+                "role": "Software Engineer (Fintech)",
+                "company": "CRED",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b925 - 42 LPA",
+                "job_type": "Full-time",
+                "tags": ["Java", "Spring Boot", "Kafka", "PostgreSQL", "Redis", "Microservices", "SQL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Engineer+CRED",
+                "description": "Design highly concurrent financial transaction engines, rewards ledgers, and credit risk evaluation microservices."
+            },
+            {
+                "role": "Core Platform Engineer",
+                "company": "Goldman Sachs",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b924 - 38 LPA",
+                "job_type": "Full-time",
+                "tags": ["Java", "Python", "Distributed Systems", "SQL", "Unix", "Algorithms", "C++"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Software+Engineer+Goldman+Sachs",
+                "description": "Develop algorithmic trading risk calculation pipelines and low-latency order routing systems."
+            }
+        ],
+        "Cloud & DevOps Engineering": [
+            {
+                "role": "DevOps / Site Reliability Engineer",
+                "company": "Netflix",
+                "location": "Mumbai / Remote, India",
+                "salary": "\u20b932 - 55 LPA",
+                "job_type": "Full-time",
+                "tags": ["Kubernetes", "AWS", "Terraform", "Linux", "Docker", "CI/CD", "Python"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=DevOps+Engineer+Netflix",
+                "description": "Automate resilient multi-region infrastructure and zero-downtime deployment pipelines for global streaming."
+            },
+            {
+                "role": "Cloud Solutions Architect",
+                "company": "Amazon AWS",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b928 - 48 LPA",
+                "job_type": "Full-time",
+                "tags": ["AWS", "Docker", "Terraform", "CI/CD", "Security", "Kubernetes", "Python"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Cloud+Architect+AWS",
+                "description": "Design secure enterprise cloud migrations, containerized microservices, and automated infrastructure as code."
+            },
+            {
+                "role": "Site Reliability Engineer (SRE)",
+                "company": "LinkedIn",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b924 - 40 LPA",
+                "job_type": "Full-time",
+                "tags": ["Kubernetes", "Python", "Prometheus", "Grafana", "Linux", "AWS", "Terraform"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=SRE+LinkedIn",
+                "description": "Manage telemetry, SLOs, automated incident remediation, and distributed system stability for 1B+ members."
+            },
+            {
+                "role": "DevOps Engineer",
+                "company": "Zomato",
+                "location": "Gurgaon, India (Hybrid)",
+                "salary": "\u20b918 - 30 LPA",
+                "job_type": "Full-time",
+                "tags": ["Docker", "Kubernetes", "CI/CD", "Jenkins", "AWS", "Linux", "Terraform"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=DevOps+Engineer+Zomato",
+                "description": "Maintain automated container build pipelines, blue-green deployments, and auto-scaling clusters."
+            },
+            {
+                "role": "Cloud Security Engineer",
+                "company": "Cisco",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b920 - 35 LPA",
+                "job_type": "Full-time",
+                "tags": ["Azure", "AWS", "IAM", "Compliance", "Terraform", "Security", "Linux"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Cloud+Security+Cisco",
+                "description": "Enforce zero-trust cloud network security, vulnerability remediation, and IAM compliance across hybrid environments."
+            },
+            {
+                "role": "Infrastructure Automation Engineer",
+                "company": "Salesforce",
+                "location": "Hyderabad, India (Hybrid)",
+                "salary": "\u20b922 - 36 LPA",
+                "job_type": "Full-time",
+                "tags": ["Ansible", "Terraform", "Python", "GCP", "Kubernetes", "CI/CD", "Docker"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Infrastructure+Engineer+Salesforce",
+                "description": "Automate declarative configuration management, multi-tenant database provisioning, and continuous deployment workflows."
+            }
+        ],
+        "UI/UX Design & Research": [
+            {
+                "role": "Senior Product Designer",
+                "company": "Airbnb",
+                "location": "Gurgaon / Remote, India",
+                "salary": "\u20b924 - 42 LPA",
+                "job_type": "Full-time",
+                "tags": ["Figma", "Design Systems", "Prototyping", "User Research", "Adobe XD", "Wireframing"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Product+Designer+Airbnb",
+                "description": "Shape next-generation travel discovery workflows through elegant interactions and rapid prototyping."
+            },
+            {
+                "role": "UI/UX Specialist",
+                "company": "Adobe",
+                "location": "Noida, India (Hybrid)",
+                "salary": "\u20b920 - 34 LPA",
+                "job_type": "Full-time",
+                "tags": ["Adobe XD", "Figma", "Wireframing", "Interaction Design", "Usability", "Prototyping"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=UX+Designer+Adobe",
+                "description": "Design intuitive creative tools and accessible interface component libraries for cloud-based authoring apps."
+            },
+            {
+                "role": "UX Researcher",
+                "company": "Spotify",
+                "location": "Mumbai / Remote, India",
+                "salary": "\u20b922 - 38 LPA",
+                "job_type": "Full-time",
+                "tags": ["User Interviews", "Usability Testing", "Personas", "Analytics", "Figma", "User Research"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=UX+Researcher+Spotify",
+                "description": "Conduct qualitative interviews and usability benchmarking to guide personalized recommendation UX."
+            },
+            {
+                "role": "Lead Interaction Designer",
+                "company": "Flipkart",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b918 - 32 LPA",
+                "job_type": "Full-time",
+                "tags": ["Micro-interactions", "Figma", "Design Tokens", "Mobile UX", "Prototyping", "Wireframing"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=UI+UX+Designer+Flipkart",
+                "description": "Craft mobile e-commerce checkout funnels, micro-animations, and regional localization design patterns."
+            },
+            {
+                "role": "Product Experience Designer",
+                "company": "Razorpay",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b916 - 28 LPA",
+                "job_type": "Full-time",
+                "tags": ["Fintech UX", "Wireframing", "Figma", "Information Architecture", "User Research", "Prototyping"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Product+Designer+Razorpay",
+                "description": "Simplify B2B financial onboarding, payment gateway verification, and treasury management workflows."
+            },
+            {
+                "role": "Design Systems Engineer",
+                "company": "Postman",
+                "location": "Bengaluru, India / Remote",
+                "salary": "\u20b920 - 35 LPA",
+                "job_type": "Full-time",
+                "tags": ["Design Tokens", "Figma", "Storybook", "Accessibility", "React", "CSS"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Design+Systems+Postman",
+                "description": "Maintain multi-platform design tokens, accessible React component libraries, and unified UI guidelines."
+            }
+        ],
+        "Data Engineering": [
+            {
+                "role": "Senior Data Engineer",
+                "company": "Databricks",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b928 - 48 LPA",
+                "job_type": "Full-time",
+                "tags": ["Apache Spark", "Python", "SQL", "Delta Lake", "Kafka", "Airflow", "ETL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Engineer+Databricks",
+                "description": "Design and optimize petabyte-scale Spark pipelines, Delta Lake architectures, and real-time streaming ingestion."
+            },
+            {
+                "role": "Analytics Engineer",
+                "company": "PhonePe",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b920 - 34 LPA",
+                "job_type": "Full-time",
+                "tags": ["dbt", "SQL", "BigQuery", "Python", "Airflow", "Data Warehouse", "ETL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Analytics+Engineer+PhonePe",
+                "description": "Own end-to-end analytical data models, dbt transformation pipelines, and reliable BI-layer datasets."
+            },
+            {
+                "role": "Data Platform Engineer",
+                "company": "Flipkart",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b922 - 38 LPA",
+                "job_type": "Full-time",
+                "tags": ["Hadoop", "Hive", "Kafka", "Python", "SQL", "Spark", "ETL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Engineer+Flipkart",
+                "description": "Build robust data lake ingestion layers and real-time event streaming pipelines for e-commerce analytics."
+            },
+            {
+                "role": "Cloud Data Engineer",
+                "company": "Accenture",
+                "location": "Pune / Bengaluru, India",
+                "salary": "\u20b916 - 28 LPA",
+                "job_type": "Full-time",
+                "tags": ["AWS Glue", "Redshift", "SQL", "Python", "Terraform", "ETL", "S3"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Engineer+Accenture",
+                "description": "Migrate enterprise data warehouses to cloud and build serverless ETL jobs in AWS-based architectures."
+            },
+            {
+                "role": "Real-time Streaming Engineer",
+                "company": "Ola",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b922 - 36 LPA",
+                "job_type": "Full-time",
+                "tags": ["Kafka", "Flink", "Spark Streaming", "Python", "SQL", "Redis", "Kubernetes"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Streaming+Engineer+Ola",
+                "description": "Build event-driven streaming architectures for real-time ride demand forecasting and live driver positioning."
+            },
+            {
+                "role": "ML Data Engineer",
+                "company": "Meesho",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b918 - 30 LPA",
+                "job_type": "Full-time",
+                "tags": ["Python", "Spark", "Kafka", "SQL", "MLflow", "Feature Store", "ETL"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Data+Engineer+Meesho",
+                "description": "Architect training data pipelines, feature stores, and serving infrastructure for recommendation models."
+            }
+        ],
+        "Mobile App Engineering": [
+            {
+                "role": "Senior Flutter Developer",
+                "company": "Paytm",
+                "location": "Noida, India (Hybrid)",
+                "salary": "\u20b918 - 32 LPA",
+                "job_type": "Full-time",
+                "tags": ["Flutter", "Dart", "Firebase", "REST APIs", "GetX", "BLoC", "Android"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Flutter+Developer+Paytm",
+                "description": "Lead cross-platform mobile feature delivery for 300M+ Paytm users using Flutter and Dart."
+            },
+            {
+                "role": "Android Engineer",
+                "company": "Zomato",
+                "location": "Gurgaon, India (On-site)",
+                "salary": "\u20b920 - 35 LPA",
+                "job_type": "Full-time",
+                "tags": ["Kotlin", "Jetpack Compose", "Android", "Coroutines", "MVVM", "Room", "Retrofit"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Android+Developer+Zomato",
+                "description": "Craft high-performance food discovery and order tracking experiences on Android using Jetpack Compose."
+            },
+            {
+                "role": "iOS Engineer",
+                "company": "CRED",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b922 - 38 LPA",
+                "job_type": "Full-time",
+                "tags": ["Swift", "SwiftUI", "iOS", "Combine", "CoreData", "REST APIs", "XCode"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=iOS+Developer+CRED",
+                "description": "Engineer premium fintech iOS experiences with fluid animations, biometric auth, and real-time credit analytics."
+            },
+            {
+                "role": "React Native Developer",
+                "company": "OYO",
+                "location": "Gurgaon / Remote, India",
+                "salary": "\u20b916 - 28 LPA",
+                "job_type": "Full-time",
+                "tags": ["React Native", "JavaScript", "TypeScript", "Redux", "REST APIs", "Firebase"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=React+Native+Developer+OYO",
+                "description": "Build cross-platform hotel booking flows, real-time availability search, and property management tools."
+            },
+            {
+                "role": "Mobile Platform Engineer",
+                "company": "Swiggy",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b920 - 36 LPA",
+                "job_type": "Full-time",
+                "tags": ["Kotlin", "Flutter", "Android", "iOS", "Swift", "Performance Optimization"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Mobile+Engineer+Swiggy",
+                "description": "Own mobile performance optimization and shared architecture across Android and iOS apps."
+            },
+            {
+                "role": "Mobile SDK Engineer",
+                "company": "Razorpay",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b918 - 32 LPA",
+                "job_type": "Full-time",
+                "tags": ["Android", "iOS", "Kotlin", "Swift", "REST APIs", "Security", "Payment SDK"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=SDK+Engineer+Razorpay",
+                "description": "Build and maintain the Razorpay Android and iOS payment SDKs used by 500K+ merchant integrations."
+            }
+        ],
+        "Cybersecurity & Infosec": [
+            {
+                "role": "Security Engineer",
+                "company": "Razorpay",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b920 - 38 LPA",
+                "job_type": "Full-time",
+                "tags": ["Penetration Testing", "OWASP", "Python", "Burp Suite", "Security Audits", "Linux"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Security+Engineer+Razorpay",
+                "description": "Perform application and network security assessments and harden payment infrastructure."
+            },
+            {
+                "role": "SOC Analyst (Tier 2)",
+                "company": "Wipro",
+                "location": "Hyderabad, India (Hybrid)",
+                "salary": "\u20b914 - 24 LPA",
+                "job_type": "Full-time",
+                "tags": ["SIEM", "SOAR", "Threat Intelligence", "Incident Response", "Splunk", "Linux"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=SOC+Analyst+Wipro",
+                "description": "Triage security alerts using SIEM platforms, escalate incidents, and develop detection playbooks."
+            },
+            {
+                "role": "Cloud Security Architect",
+                "company": "Cisco",
+                "location": "Bengaluru, India (Hybrid)",
+                "salary": "\u20b928 - 48 LPA",
+                "job_type": "Full-time",
+                "tags": ["Zero Trust", "AWS", "Azure", "IAM", "Firewall", "Compliance", "Terraform"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Cloud+Security+Cisco",
+                "description": "Design zero-trust cloud network policies, identity governance, and regulatory compliance across hybrid environments."
+            },
+            {
+                "role": "Application Security Engineer",
+                "company": "PhonePe",
+                "location": "Bengaluru, India (On-site)",
+                "salary": "\u20b922 - 40 LPA",
+                "job_type": "Full-time",
+                "tags": ["DAST", "SAST", "Python", "Cryptography", "API Security", "OWASP", "CI/CD"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=AppSec+Engineer+PhonePe",
+                "description": "Integrate security into SDLC, automate SAST/DAST pipelines, and perform secure code reviews."
+            },
+            {
+                "role": "Threat & Vulnerability Analyst",
+                "company": "HCL Technologies",
+                "location": "Noida, India (Hybrid)",
+                "salary": "\u20b916 - 28 LPA",
+                "job_type": "Full-time",
+                "tags": ["CVE", "Nessus", "Vulnerability Management", "Python", "Linux", "Wireshark"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Vulnerability+Analyst+HCL",
+                "description": "Operate vulnerability scanning programs, prioritize CVEs by business risk, and report remediation status."
+            },
+            {
+                "role": "Malware & Forensics Analyst",
+                "company": "Quick Heal",
+                "location": "Pune, India (On-site)",
+                "salary": "\u20b912 - 22 LPA",
+                "job_type": "Full-time",
+                "tags": ["Reverse Engineering", "Malware Analysis", "YARA", "Python", "Assembly", "Linux"],
+                "apply_url": "https://www.linkedin.com/jobs/search/?keywords=Malware+Analyst+Quick+Heal",
+                "description": "Reverse-engineer malware samples, write YARA detection rules, and contribute threat intelligence to AV engine signatures."
+            }
         ]
     }
-    return job_templates.get(predicted_field, job_templates["Data Science & AI"])
+
+    # --- Dynamic skill-based scoring ---
+    # Normalize candidate skills to lowercase tokens for fuzzy matching
+    candidate_skills_lower = set()
+    for s in detected_skills:
+        for token in re.split(r'[\s/,]+', s.lower()):
+            if token:
+                candidate_skills_lower.add(token)
+
+    # Score every job across ALL domain pools
+    scored_jobs = []
+    for domain, jobs in job_templates.items():
+        domain_bonus = 1.0 if domain == predicted_field else 0.0
+        for job in jobs:
+            job_tags_lower = [t.lower() for t in job.get("tags", [])]
+            matched = 0
+            for tag in job_tags_lower:
+                tag_tokens = set(re.split(r'[\s/,]+', tag))
+                if tag_tokens & candidate_skills_lower:
+                    matched += 1
+
+            total_tags = max(len(job_tags_lower), 1)
+            skill_overlap = matched / total_tags  # 0.0 - 1.0
+
+            # Weighted score: 70% skill match + 30% domain alignment
+            raw_score = (skill_overlap * 0.70) + (domain_bonus * 0.30)
+
+            # Map to a realistic percentage band (55-98%)
+            match_pct = int(55 + raw_score * 43)
+            match_pct = max(55, min(98, match_pct))
+
+            scored_jobs.append({
+                **job,
+                "match": f"{match_pct}% Match",
+                "_score": raw_score,
+                "_domain": domain
+            })
+
+    # Sort descending by score; domain-aligned jobs break ties first
+    scored_jobs.sort(key=lambda x: (-x["_score"], 0 if x["_domain"] == predicted_field else 1))
+
+    # Strip internal scoring keys before returning
+    top_jobs = []
+    for j in scored_jobs[:6]:
+        j_clean = {k: v for k, v in j.items() if not k.startswith("_")}
+        top_jobs.append(j_clean)
+
+    return top_jobs
 
 @app.get("/health")
 def health():
@@ -410,9 +1032,40 @@ async def parse_and_analyze(
         except Exception:
             pdf_base64 = ""
 
-    parsed_name = extracted_data.get("name") or act_name or "Candidate"
+    # Robust regex extraction for contact details
     parsed_email = extracted_data.get("email") or act_mail or ""
+    if not parsed_email:
+        em_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b', resume_text)
+        if em_match:
+            parsed_email = em_match.group(0)
+
     parsed_mobile = extracted_data.get("mobile_number") or act_mob or ""
+    if not parsed_mobile:
+        mob_match = re.search(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+91[-.\s]?\d{10}|\b\d{10}\b', resume_text)
+        if mob_match:
+            parsed_mobile = mob_match.group(0).strip()
+
+    parsed_linkedin = linkedin or ""
+    if not parsed_linkedin:
+        li_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', resume_text, re.IGNORECASE)
+        if li_match:
+            parsed_linkedin = li_match.group(0)
+
+    parsed_github = github or ""
+    if not parsed_github:
+        gh_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', resume_text, re.IGNORECASE)
+        if gh_match:
+            parsed_github = gh_match.group(0)
+
+    parsed_name = extracted_data.get("name") or act_name or ""
+    if not parsed_name or parsed_name == "Candidate":
+        first_lines = [l.strip() for l in resume_text[:600].split('\n') if l.strip()]
+        for l in first_lines[:3]:
+            if len(l) < 35 and not any(x in l.lower() for x in ['@', 'http', 'github', 'linkedin', 'resume', 'cv']) and not re.search(r'\d', l):
+                parsed_name = l
+                break
+    if not parsed_name:
+        parsed_name = "Candidate"
 
     response_payload = {
         "success": True,
@@ -423,8 +1076,8 @@ async def parse_and_analyze(
             "act_name": act_name,
             "act_mail": act_mail,
             "act_mob": act_mob,
-            "linkedin": linkedin,
-            "github": github,
+            "linkedin": parsed_linkedin,
+            "github": parsed_github,
             "predicted_field": predicted_field,
             "domain_scores": domain_scores,
             "candidate_level": cand_level,

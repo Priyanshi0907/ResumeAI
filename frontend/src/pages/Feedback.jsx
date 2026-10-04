@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { feedbackApi } from '../services/api';
-import { MessageSquare, Star, Edit2, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { MessageSquare, Star, Trash2, CheckCircle2, AlertCircle, User } from 'lucide-react';
 
 export default function Feedback() {
+  const { user, isLoggedIn } = useAuth();
+
   const [reviews, setReviews] = useState([]);
   const [formData, setFormData] = useState({
     feed_name: '',
@@ -13,11 +16,18 @@ export default function Feedback() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
 
-  // Inline editing state
-  const [editingId, setEditingId] = useState(null);
-  const [editScore, setEditScore] = useState(5);
-  const [editComments, setEditComments] = useState('');
+  // Pre-fill name/email from logged-in user
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        feed_name: prev.feed_name || user.name || '',
+        feed_email: prev.feed_email || user.email || '',
+      }));
+    }
+  }, [user]);
 
   const fetchFeedback = async () => {
     try {
@@ -49,8 +59,14 @@ export default function Feedback() {
       const res = await feedbackApi.create(formData);
       if (res.data.success) {
         setMessage('Thank you! Your feedback has been recorded.');
-        setFormData({ feed_name: '', feed_email: '', feed_score: 5, comments: '' });
+        setFormData(prev => ({
+          feed_name: user?.name || '',
+          feed_email: user?.email || '',
+          feed_score: 5,
+          comments: '',
+        }));
         fetchFeedback();
+        setTimeout(() => setMessage(''), 5000);
       }
     } catch (err) {
       setErrorMessage('Failed to submit feedback. Please try again.');
@@ -59,26 +75,9 @@ export default function Feedback() {
     }
   };
 
-  const handleStartEdit = (r) => {
-    setEditingId(r.id);
-    setEditScore(parseInt(r.feed_score, 10) || 5);
-    setEditComments(r.comments || '');
-  };
-
-  const handleSaveEdit = async (id) => {
-    try {
-      const res = await feedbackApi.update(id, { feed_score: editScore, comments: editComments });
-      if (res.data.success) {
-        setEditingId(null);
-        fetchFeedback();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to remove this feedback review?')) return;
+    if (!window.confirm('Are you sure you want to delete your review?')) return;
+    setDeletingId(id);
     try {
       const res = await feedbackApi.delete(id);
       if (res.data.success) {
@@ -86,6 +85,9 @@ export default function Feedback() {
       }
     } catch (err) {
       console.error(err);
+      alert('Could not delete review. Please try again.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -119,6 +121,28 @@ export default function Feedback() {
     );
   };
 
+  // Generate initials avatar color from name
+  const avatarColor = (name = '') => {
+    const colors = [
+      '#8E3B46', '#4A6FA5', '#2D6A4F', '#6B4C8A', '#C05621',
+      '#1A6B7A', '#7A6B1A', '#5C3D2E', '#3D5C4E', '#4E3D7A',
+    ];
+    let hash = 0;
+    for (const c of name) hash = (hash << 5) - hash + c.charCodeAt(0);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const initials = (name = '') =>
+    name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').join('').slice(0, 2) || '?';
+
+  // Check if current user owns a review
+  const isOwner = (review) => {
+    if (!isLoggedIn || !user) return false;
+    // Match by user_id (preferred) or fall back to email match
+    if (review.user_id && user.id) return review.user_id === user.id;
+    return review.feed_email?.toLowerCase() === user.email?.toLowerCase();
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
@@ -138,14 +162,14 @@ export default function Feedback() {
           </div>
 
           {message && (
-            <div style={{ background: 'rgba(45, 106, 79, 0.08)', border: '1px solid rgba(45, 106, 79, 0.25)', borderRadius: '8px', padding: '10px 14px', color: '#2D6A4F', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ background: 'rgba(45,106,79,0.08)', border: '1px solid rgba(45,106,79,0.25)', borderRadius: '8px', padding: '10px 14px', color: '#2D6A4F', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckCircle2 size={16} />
               <span>{message}</span>
             </div>
           )}
 
           {errorMessage && (
-            <div style={{ background: 'rgba(192, 57, 43, 0.08)', border: '1px solid rgba(192, 57, 43, 0.25)', borderRadius: '8px', padding: '10px 14px', color: '#C0392B', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: '8px', padding: '10px 14px', color: '#C0392B', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertCircle size={16} />
               <span>{errorMessage}</span>
             </div>
@@ -207,7 +231,12 @@ export default function Feedback() {
               />
             </div>
 
-            <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px' }} disabled={isSubmitting}>
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ width: '100%', padding: '12px' }}
+              disabled={isSubmitting}
+            >
               <span>{isSubmitting ? 'Recording...' : 'Record Community Feedback'}</span>
             </button>
           </form>
@@ -221,11 +250,9 @@ export default function Feedback() {
             <div style={{ fontSize: '3.4rem', fontWeight: '900', color: '#A07840', lineHeight: 1 }}>
               {avgScore.toFixed(1)}
             </div>
-            <div style={{ margin: '8px 0' }}>
-              {renderStars(avgScore, 18)}
-            </div>
+            <div style={{ margin: '8px 0' }}>{renderStars(avgScore, 18)}</div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-              Based on {totalReviews} community submissions
+              Based on {totalReviews} community submission{totalReviews !== 1 ? 's' : ''}
             </div>
           </div>
 
@@ -239,7 +266,7 @@ export default function Feedback() {
                     {star} <Star size={11} fill="#A07840" color="#A07840" />
                   </span>
                   <div style={{ flex: 1, height: '6px', background: 'var(--border)', borderRadius: '99px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: '#8E3B46', borderRadius: '99px' }} />
+                    <div style={{ height: '100%', width: `${pct}%`, background: '#8E3B46', borderRadius: '99px', transition: 'width 0.4s ease' }} />
                   </div>
                   <span style={{ width: '36px', color: 'var(--text-dim)', textAlign: 'right' }}>{pct}%</span>
                 </div>
@@ -262,75 +289,73 @@ export default function Feedback() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {reviews.map((r) => {
-              const isEditing = editingId === r.id;
+              const owned = isOwner(r);
+              const color = avatarColor(r.feed_name);
+              const ini = initials(r.feed_name);
 
               return (
-                <div key={r.id} className="card" style={{ padding: '18px 20px' }}>
-                  {isEditing ? (
-                    <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '8px' }}>
-                        Editing Review: {r.feed_name}
+                <div
+                  key={r.id}
+                  className="card"
+                  style={{
+                    padding: '16px 20px',
+                    border: owned ? '1px solid rgba(142,59,70,0.3)' : undefined,
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+                    {/* Avatar + content */}
+                    <div style={{ display: 'flex', gap: '14px', flex: 1, minWidth: 0 }}>
+                      {/* Avatar */}
+                      <div style={{
+                        width: '40px', height: '40px', borderRadius: '50%',
+                        background: color, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.82rem', fontWeight: '700', flexShrink: 0,
+                        letterSpacing: '0.5px',
+                      }}>
+                        {ini}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
-                            onClick={() => setEditScore(s)}
-                          >
-                            <Star
-                              size={18}
-                              fill={editScore >= s ? '#A07840' : 'none'}
-                              color={editScore >= s ? '#A07840' : 'var(--border-strong)'}
-                            />
-                          </button>
-                        ))}
-                      </div>
-
-                      <textarea
-                        className="form-textarea"
-                        rows="3"
-                        value={editComments}
-                        onChange={(e) => setEditComments(e.target.value)}
-                        style={{ marginBottom: '10px' }}
-                      />
-
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn-primary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => handleSaveEdit(r.id)}>
-                          Save Changes
-                        </button>
-                        <button className="btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => setEditingId(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '0.9rem' }}>{r.feed_name}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '2px' }}>
+                          <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                            {r.feed_name}
+                          </span>
                           {renderStars(parseFloat(r.feed_score) || 5, 13)}
+                          {owned && (
+                            <span style={{
+                              fontSize: '0.68rem', fontWeight: '700', padding: '1px 7px',
+                              background: 'rgba(142,59,70,0.1)', color: '#8E3B46',
+                              borderRadius: '99px', border: '1px solid rgba(142,59,70,0.2)',
+                              letterSpacing: '0.4px',
+                            }}>
+                              YOUR REVIEW
+                            </span>
+                          )}
                         </div>
-                        <div style={{ fontSize: '0.82rem', color: 'var(--text-body)', lineHeight: '1.5', marginTop: '4px' }}>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-body)', lineHeight: '1.55', marginTop: '4px' }}>
                           {r.comments || 'No written comment provided.'}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '6px' }}>
-                          {r.timestamp}
+                          {r.timestamp?.replace('_', ' ') || ''}
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} onClick={() => handleStartEdit(r)} title="Edit Review">
-                          <Edit2 size={13} />
-                        </button>
-                        <button className="btn-danger" style={{ padding: '6px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(r.id)} title="Delete Review">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
                     </div>
-                  )}
+
+                    {/* Delete button — only for owner */}
+                    {owned && (
+                      <button
+                        className="btn-danger"
+                        style={{ padding: '6px 10px', fontSize: '0.75rem', flexShrink: 0, opacity: deletingId === r.id ? 0.5 : 1 }}
+                        onClick={() => handleDelete(r.id)}
+                        disabled={deletingId === r.id}
+                        title="Delete your review"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

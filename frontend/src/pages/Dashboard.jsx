@@ -36,7 +36,8 @@ import {
   Flame,
   AlertTriangle,
   Clock,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 export default function Dashboard({ initialTab = 'overview' }) {
@@ -53,52 +54,42 @@ export default function Dashboard({ initialTab = 'overview' }) {
       const stored = localStorage.getItem('resume_audit_history');
       if (stored) {
         setHistoryRecords(JSON.parse(stored));
+      } else if (latestAnalysis && localStorage.getItem('resume_history_cleared') !== 'true') {
+        const now = new Date().toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        const baseline = [{
+          id: `v1.0_${Date.now()}`,
+          version: 'Version 1.0',
+          filename: latestAnalysis.pdf_name || 'Resume.pdf',
+          date: now,
+          timestamp: Date.now(),
+          score: latestAnalysis.resume_score || 85,
+          content: latestAnalysis.health_breakdown?.content || 92,
+          formatting: latestAnalysis.health_breakdown?.formatting || 84,
+          keywords: latestAnalysis.health_breakdown?.keywords || 87,
+          impact: latestAnalysis.health_breakdown?.impact || 76,
+          completeness: latestAnalysis.health_breakdown?.completeness || 91,
+          diff: 0,
+        }];
+        localStorage.setItem('resume_audit_history', JSON.stringify(baseline));
+        setHistoryRecords(baseline);
+      } else {
+        setHistoryRecords([]);
       }
     } catch (e) {
       console.error(e);
     }
-  }, []);
-
-  // Save new history version on latestAnalysis change
-  useEffect(() => {
-    if (latestAnalysis) {
-      try {
-        const stored = localStorage.getItem('resume_audit_history');
-        let records = stored ? JSON.parse(stored) : [];
-        
-        const now = new Date().toLocaleDateString('en-US', {
-          month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
-        
-        const isDuplicate = records.some(
-          (r) => r.score === latestAnalysis.resume_score && r.filename === (latestAnalysis.pdf_name || 'Resume.pdf')
-        );
-
-        if (!isDuplicate) {
-          const prevScore = records.length > 0 ? records[records.length - 1].score : (latestAnalysis.resume_score || 85) - 8;
-          const newEntry = {
-            id: `v${records.length + 1}.0`,
-            version: `Version ${records.length + 1}.0`,
-            filename: latestAnalysis.pdf_name || `Resume_v${records.length + 1}.pdf`,
-            date: now,
-            timestamp: Date.now(),
-            score: latestAnalysis.resume_score || 85,
-            content: latestAnalysis.health_breakdown?.content || 92,
-            formatting: latestAnalysis.health_breakdown?.formatting || 84,
-            keywords: latestAnalysis.health_breakdown?.keywords || 87,
-            impact: latestAnalysis.health_breakdown?.impact || 76,
-            completeness: latestAnalysis.health_breakdown?.completeness || 91,
-            diff: records.length > 0 ? (latestAnalysis.resume_score || 85) - prevScore : 8,
-          };
-          records.push(newEntry);
-          localStorage.setItem('resume_audit_history', JSON.stringify(records));
-          setHistoryRecords(records);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
   }, [latestAnalysis]);
+
+  // Clear all scan history
+  const handleClearHistory = () => {
+    if (window.confirm('Are you sure you want to clear your entire scan history? This action cannot be undone.')) {
+      localStorage.removeItem('resume_audit_history');
+      localStorage.setItem('resume_history_cleared', 'true');
+      setHistoryRecords([]);
+    }
+  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -109,9 +100,19 @@ export default function Dashboard({ initialTab = 'overview' }) {
 
   const displayName = user?.name || latestAnalysis?.parsed_name || 'Priyanshi';
 
+  // Handler when a new resume is parsed from the UploadModal
   const handleAnalysisComplete = (data) => {
     saveAnalysis(data);
-    setCurrentTab('overview');
+    try {
+      const stored = localStorage.getItem('resume_audit_history');
+      if (stored) {
+        setHistoryRecords(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    // Navigate directly to history tab so the user sees their new version and score diff
+    setCurrentTab('history');
   };
 
   const toggleMove = (id) => {
@@ -652,12 +653,20 @@ export default function Dashboard({ initialTab = 'overview' }) {
               </p>
             </div>
 
-            {historyRecords.length === 0 && !latestAnalysis ? (
+            {historyRecords.length === 0 ? (
               <div className="card" style={{ padding: '48px 32px', textAlign: 'center', maxWidth: '640px', margin: '20px auto' }}>
                 <History size={36} color="#8E3B46" style={{ margin: '0 auto 12px auto' }} />
-                <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '8px' }}>No History Recorded Yet</h3>
-                <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '20px' }}>Upload your resume to begin tracking your version-over-version score improvements.</p>
-                <button className="btn-primary" onClick={() => setUploadModalOpen(true)}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '8px' }}>No History Recorded</h3>
+                <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                  Your scan history has been cleared or no scans have been recorded yet. Click below to scan a resume and begin tracking version-over-version score improvements.
+                </p>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    localStorage.removeItem('resume_history_cleared');
+                    setUploadModalOpen(true);
+                  }}
+                >
                   <Upload size={15} /><span>Upload Resume</span>
                 </button>
               </div>
@@ -665,19 +674,46 @@ export default function Dashboard({ initialTab = 'overview' }) {
               <div>
                 {/* Historical Timeline Table */}
                 <div className="card" style={{ marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <div className="sec-label" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div className="sec-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Clock size={14} color="#8E3B46" />
-                      <span>Chronological Scan History ({historyRecords.length || 1} Scans Recorded)</span>
+                      <span>Chronological Scan History ({historyRecords.length} Scans Recorded)</span>
                     </div>
-                    <button
-                      className="btn-secondary"
-                      style={{ fontSize: '0.78rem', padding: '6px 14px' }}
-                      onClick={() => setUploadModalOpen(true)}
-                    >
-                      <Plus size={13} />
-                      <span>Scan Revised Version</span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {historyRecords.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{
+                            fontSize: '0.78rem',
+                            padding: '6px 14px',
+                            color: '#C0392B',
+                            borderColor: 'rgba(192, 57, 43, 0.3)',
+                            background: 'rgba(192, 57, 43, 0.04)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={handleClearHistory}
+                          title="Clear all recorded resume scan history"
+                        >
+                          <Trash2 size={13} />
+                          <span>Clear All</span>
+                        </button>
+                      )}
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: '0.78rem', padding: '6px 14px' }}
+                        onClick={() => {
+                          localStorage.removeItem('resume_history_cleared');
+                          setUploadModalOpen(true);
+                        }}
+                      >
+                        <Plus size={13} />
+                        <span>Scan Revised Version</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="data-table-container">

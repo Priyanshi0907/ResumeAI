@@ -71,9 +71,13 @@ const initDb = () => {
         feed_email TEXT,
         feed_score TEXT,
         comments TEXT,
-        timestamp TEXT
+        timestamp TEXT,
+        user_id INTEGER
       )
     `);
+
+    // Migration: add user_id to user_feedback if it doesn't exist yet
+    db.run(`ALTER TABLE user_feedback ADD COLUMN user_id INTEGER`, () => {});
   });
 };
 
