@@ -119,6 +119,23 @@ export const AuthProvider = ({ children }) => {
     setJustSignedUp(false);
   };
 
+  const removeAnalysis = () => {
+    setLatestAnalysis(null);
+    localStorage.removeItem('resumeai_analysis');
+    localStorage.removeItem('resume_audit_history');
+    localStorage.removeItem('resume_history_cleared');
+    // Also clear per-user key
+    const savedUser = localStorage.getItem('resumeai_user');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u.id) {
+          localStorage.removeItem(getUserAnalysisKey(u.id));
+        }
+      } catch (_) {}
+    }
+  };
+
   const value = {
     user,
     token,
@@ -128,6 +145,7 @@ export const AuthProvider = ({ children }) => {
     loginUser,
     logoutUser,
     saveAnalysis,
+    removeAnalysis,
     clearJustSignedUp,
   };
 

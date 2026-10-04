@@ -193,7 +193,7 @@ const DOMAIN_MARKET_BENCHMARKS = {
 };
 
 export default function Analyzer({ setActivePage }) {
-  const { latestAnalysis, saveAnalysis } = useAuth();
+  const { latestAnalysis, saveAnalysis, removeAnalysis } = useAuth();
   
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -204,11 +204,9 @@ export default function Analyzer({ setActivePage }) {
   const [aiTips, setAiTips] = useState(null);
   const [isGeneratingTips, setIsGeneratingTips] = useState(false);
 
-  // Sync if latestAnalysis changes externally (e.g. uploaded from modal or signup)
+  // Sync if latestAnalysis changes externally (e.g. uploaded from modal or removed)
   useEffect(() => {
-    if (latestAnalysis && !analysisData) {
-      setAnalysisData(latestAnalysis);
-    }
+    setAnalysisData(latestAnalysis || null);
   }, [latestAnalysis]);
 
   const handleFileChange = (e) => {
@@ -258,10 +256,13 @@ export default function Analyzer({ setActivePage }) {
   };
 
   const resetAnalysis = () => {
-    setAnalysisData(null);
-    setSelectedFile(null);
-    setAiTips(null);
-    setActiveTab('checklist');
+    if (window.confirm('Do you want to remove the current resume and analyze another one?')) {
+      if (removeAnalysis) removeAnalysis();
+      setAnalysisData(null);
+      setSelectedFile(null);
+      setAiTips(null);
+      setActiveTab('checklist');
+    }
   };
 
   return (

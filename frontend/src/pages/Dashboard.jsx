@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard({ initialTab = 'overview' }) {
-  const { user, logoutUser, latestAnalysis, saveAnalysis } = useAuth();
+  const { user, logoutUser, latestAnalysis, saveAnalysis, removeAnalysis } = useAuth();
   const [currentTab, setCurrentTab] = useState(initialTab);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -87,6 +87,14 @@ export default function Dashboard({ initialTab = 'overview' }) {
     if (window.confirm('Are you sure you want to clear your entire scan history? This action cannot be undone.')) {
       localStorage.removeItem('resume_audit_history');
       localStorage.setItem('resume_history_cleared', 'true');
+      setHistoryRecords([]);
+    }
+  };
+
+  // Remove current resume analysis and clear history
+  const handleRemoveResume = () => {
+    if (window.confirm('Are you sure you want to remove your current resume? This will reset your career intelligence snapshot.')) {
+      if (removeAnalysis) removeAnalysis();
       setHistoryRecords([]);
     }
   };
@@ -799,19 +807,48 @@ export default function Dashboard({ initialTab = 'overview' }) {
                   <span style={{ fontSize: '1.6rem' }}>👋</span>
                 </h1>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Here's your career intelligence snapshot.
+                  {latestAnalysis?.pdf_name ? (
+                    <span>Active Resume: <strong style={{ color: 'var(--text-main)' }}>{latestAnalysis.pdf_name}</strong></span>
+                  ) : (
+                    "Here's your career intelligence snapshot."
+                  )}
                 </p>
               </div>
 
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ padding: '10px 18px', fontSize: '0.86rem', fontWeight: '600' }}
-                onClick={() => setUploadModalOpen(true)}
-              >
-                <Upload size={15} />
-                <span>Upload New Resume</span>
-              </button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {latestAnalysis && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{
+                      padding: '10px 16px',
+                      fontSize: '0.86rem',
+                      fontWeight: '600',
+                      color: '#C0392B',
+                      borderColor: 'rgba(192, 57, 43, 0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer'
+                    }}
+                    onClick={handleRemoveResume}
+                    title="Remove Current Resume"
+                  >
+                    <Trash2 size={15} color="#C0392B" />
+                    <span>Remove Resume</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '10px 18px', fontSize: '0.86rem', fontWeight: '600' }}
+                  onClick={() => setUploadModalOpen(true)}
+                >
+                  <Upload size={15} />
+                  <span>Upload New Resume</span>
+                </button>
+              </div>
             </div>
 
             {!latestAnalysis ? (
