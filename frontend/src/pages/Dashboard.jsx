@@ -111,8 +111,8 @@ export default function Dashboard({ initialTab = 'overview' }) {
     } catch (e) {
       console.error(e);
     }
-    // Navigate directly to history tab so the user sees their new version and score diff
-    setCurrentTab('history');
+    // Navigate to overview tab so the user sees their updated dashboard
+    setCurrentTab('overview');
   };
 
   const toggleMove = (id) => {
@@ -1044,7 +1044,7 @@ export default function Dashboard({ initialTab = 'overview' }) {
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {latestAnalysis.best_matches?.map((job, idx) => (
+                        {latestAnalysis.best_matches?.slice(0, 3).map((job, idx) => (
                           <div key={idx} style={{
                             padding: '10px 12px',
                             background: 'var(--bg-card-2)',
