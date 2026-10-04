@@ -731,70 +731,107 @@ KEY RESPONSIBILITIES:
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION: TARGET JOB MATCHES (Recommended for You)
+          Only shown after a resume has been analyzed
           ───────────────────────────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: '28px', padding: '24px 22px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '18px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span style={{
-                background: 'var(--primary-soft)',
-                color: 'var(--primary)',
-                fontWeight: '800',
-                fontSize: '0.72rem',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                Top Recommendations
-              </span>
-              <span style={{ fontSize: '0.75rem', color: '#2D6A4F', fontWeight: '700' }}>
-                • 6 Roles Matched to Your Resume
-              </span>
+      {latestAnalysis ? (
+        <div className="card" style={{ marginBottom: '28px', padding: '24px 22px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '18px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{
+                  background: 'var(--primary-soft)',
+                  color: 'var(--primary)',
+                  fontWeight: '800',
+                  fontSize: '0.72rem',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Top Recommendations
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#2D6A4F', fontWeight: '700' }}>
+                  • {latestAnalysis.best_matches?.length || 6} Roles Matched to Your Resume
+                </span>
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)', margin: '4px 0 2px 0' }}>
+                Target Job Matches
+              </h2>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                Based on your detected domain <b>({detectedDomain})</b> and verified technical skills. Click <b>Apply Now</b> to open the live job application, or click <b>Match ATS</b> to test compatibility.
+              </p>
             </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)', margin: '4px 0 2px 0' }}>
-              Target Job Matches
-            </h2>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
-              Based on your detected domain <b>({detectedDomain})</b> and verified technical skills. Click <b>Apply Now</b> to open the live job application, or click <b>Match ATS</b> to test compatibility.
-            </p>
+
+            {/* Domain Filter Pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {[
+                { id: 'auto', label: '⭐ Recommended' },
+                { id: 'Data Science & AI', label: 'Data & AI' },
+                { id: 'Full Stack Web Development', label: 'Full Stack' },
+                { id: 'Software Engineering', label: 'Software Eng' },
+                { id: 'Cloud & DevOps Engineering', label: 'DevOps & Cloud' },
+                { id: 'UI/UX Design & Research', label: 'UI/UX Design' },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setSelectedDomainFilter(pill.id)}
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: selectedDomainFilter === pill.id ? '700' : '500',
+                    padding: '5px 12px',
+                    borderRadius: '99px',
+                    border: `1px solid ${selectedDomainFilter === pill.id ? 'var(--primary)' : 'var(--border)'}`,
+                    background: selectedDomainFilter === pill.id ? 'var(--primary)' : 'var(--bg-card-2)',
+                    color: selectedDomainFilter === pill.id ? '#FFFFFF' : 'var(--text-body)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Domain Filter Pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {[
-              { id: 'auto', label: '⭐ Recommended' },
-              { id: 'Data Science & AI', label: 'Data & AI' },
-              { id: 'Full Stack Web Development', label: 'Full Stack' },
-              { id: 'Software Engineering', label: 'Software Eng' },
-              { id: 'Cloud & DevOps Engineering', label: 'DevOps & Cloud' },
-              { id: 'UI/UX Design & Research', label: 'UI/UX Design' },
-            ].map((pill) => (
-              <button
-                key={pill.id}
-                type="button"
-                onClick={() => setSelectedDomainFilter(pill.id)}
-                style={{
-                  fontSize: '0.74rem',
-                  fontWeight: selectedDomainFilter === pill.id ? '700' : '500',
-                  padding: '5px 12px',
-                  borderRadius: '99px',
-                  border: `1px solid ${selectedDomainFilter === pill.id ? 'var(--primary)' : 'var(--border)'}`,
-                  background: selectedDomainFilter === pill.id ? 'var(--primary)' : 'var(--bg-card-2)',
-                  color: selectedDomainFilter === pill.id ? '#FFFFFF' : 'var(--text-body)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {pill.label}
-              </button>
-            ))}
-          </div>
+          {/* 6 Target Job Cards Grid */}
+          {renderTargetJobsGrid()}
         </div>
-
-        {/* 6 Target Job Cards Grid */}
-        {renderTargetJobsGrid()}
-      </div>
+      ) : (
+        /* Empty state — no resume analyzed yet */
+        <div className="card" style={{ marginBottom: '28px', padding: '48px 32px', textAlign: 'center' }}>
+          <div style={{
+            width: '56px', height: '56px', borderRadius: '50%',
+            background: 'var(--primary-soft)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#8E3B46', margin: '0 auto 16px auto'
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+          </div>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '8px' }}>
+            Upload Your Resume to See Job Matches
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '420px', margin: '0 auto 20px auto', lineHeight: '1.6' }}>
+            Job recommendations are dynamically generated based on the skills and domain detected from your resume. Analyze your resume first to unlock personalized matches.
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ padding: '10px 24px', fontSize: '0.88rem' }}
+            onClick={() => setActivePage && setActivePage('analyzer')}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Go to Resume Analyzer
+          </button>
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION: MATCHER INPUT FORM & COMPARISON
